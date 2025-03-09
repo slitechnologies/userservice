@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+		 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<parent>
 		<groupId>org.springframework.boot</groupId>
@@ -11,8 +11,9 @@
 	<groupId>zw.co.manaService</groupId>
 	<artifactId>userService</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
+	<packaging>war</packaging> <!-- Change packaging to WAR -->
 	<name>userService</name>
-	<description>User Management Service For  An All In One  Service Platform.</description>
+	<description>User Management Service For An All-In-One Service Platform.</description>
 	<url/>
 	<licenses>
 		<license/>
@@ -87,7 +88,6 @@
 			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
 			<version>2.8.5</version>
 		</dependency>
-
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
@@ -120,7 +120,6 @@
 			</dependency>
 		</dependencies>
 	</dependencyManagement>
-
 	<build>
 		<plugins>
 			<plugin>
@@ -139,6 +138,7 @@
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
 				<configuration>
+					<layout>WAR</layout> <!-- Ensure WAR layout -->
 					<excludes>
 						<exclude>
 							<groupId>org.projectlombok</groupId>
@@ -149,5 +149,4 @@
 			</plugin>
 		</plugins>
 	</build>
-
 </project>
