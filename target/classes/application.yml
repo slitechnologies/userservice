@@ -6,6 +6,19 @@ spring:
     username: postgres
     password: Rommel@19
     driver-class-name: org.postgresql.Driver
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: tkayenie@gmail.com
+    password: djesqkjaighgvedu
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          ssl:
+            trust: smtp.gmail.com
   jpa:
     hibernate:
       ddl-auto: update
@@ -43,3 +56,6 @@ logging:
   level:
     zw.co.manaService: DEBUG
     org.springframework.security: DEBUG
+app:
+  frontend:
+    url: http://localhost:3000

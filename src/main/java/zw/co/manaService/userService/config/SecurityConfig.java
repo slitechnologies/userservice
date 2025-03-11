@@ -22,6 +22,7 @@ import zw.co.manaService.userService.security.JwtAuthenticationFilter;
 @EnableWebSecurity
 @EnableMethodSecurity
 @RequiredArgsConstructor
+@SuppressWarnings("unused")
 public class SecurityConfig {
 
     private final UserDetailsService userDetailsService;
@@ -30,6 +31,9 @@ public class SecurityConfig {
             "/api/users/register",
             "/api/users/login",
             "/api/users/refresh-token",
+            "/api/users/forgot-password",
+            "/api/users/reset-password/validate",
+            "/api/users/reset-password",
             "/api/roles",
             "/v3/api-docs/**",
             "/swagger-ui/**",

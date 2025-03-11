@@ -19,4 +19,26 @@ public interface UserService {
     void enableUser(Long id);
     String refreshToken(String refreshToken);
     UserResponseDto getCurrentUserProfile();
+
+    // Existing methods...
+
+    /**
+     * Initiates the password reset process for a user with the given email
+     * @param email User's email
+     */
+    void requestPasswordReset(String email);
+
+    /**
+     * Validates if a password reset token is valid and not expired
+     * @param token The token to validate
+     * @return true if token is valid
+     */
+    boolean validatePasswordResetToken(String token);
+
+    /**
+     * Resets a user's password using a valid token
+     * @param token Reset token
+     * @param newPassword New password
+     */
+    void resetPassword(String token, String newPassword);
 }

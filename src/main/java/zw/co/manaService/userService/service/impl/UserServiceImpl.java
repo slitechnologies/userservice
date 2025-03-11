@@ -2,9 +2,11 @@ package zw.co.manaService.userService.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.security.authentication.*;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -18,8 +20,10 @@ import zw.co.manaService.userService.exception.*;
 import zw.co.manaService.userService.model.Role;
 import zw.co.manaService.userService.model.User;
 import zw.co.manaService.userService.model.dto.AuthResponseDto;
+import zw.co.manaService.userService.model.dto.PasswordResetToken;
 import zw.co.manaService.userService.model.dto.UserRegistrationDto;
 import zw.co.manaService.userService.model.dto.UserResponseDto;
+import zw.co.manaService.userService.repository.PasswordResetTokenRepository;
 import zw.co.manaService.userService.repository.RoleRepository;
 import zw.co.manaService.userService.repository.UserRepository;
 import zw.co.manaService.userService.security.CustomUserDetails;
@@ -42,6 +46,12 @@ public class UserServiceImpl implements UserService {
     private final JwtTokenProvider jwtTokenProvider;
     private final UserEventProducer userEventProducer;
     private final RoleRepository roleRepository;
+    private final PasswordResetTokenRepository tokenRepository;
+    private final JavaMailSender emailSender;
+
+    @Value("${app.frontend.url:http://localhost:3000}")
+    private String frontendUrl;
+
 
     private final UserDetailsService userDetailsService;
 
@@ -125,54 +135,6 @@ public class UserServiceImpl implements UserService {
         }
     }
 
-//    @Override
-//    @Transactional
-//    public UserResponseDto register(UserRegistrationDto registrationDto) {
-//        if (userRepository.existsByEmail(registrationDto.getEmail())) {
-//            throw new UserAlreadyExistsException("User with email " + registrationDto.getEmail() + " already exists");
-//        }
-//
-//        // Initialize roles set
-//        Set<Role> roles = new HashSet<>();
-//
-//        // Check for roles in the registration DTO
-//        if (registrationDto.getRoles() == null || registrationDto.getRoles().length == 0) {
-//            // Fetch the default CLIENT role from the database
-//            Role defaultRole = roleRepository.findByName("CLIENT")
-//                    .orElseThrow(() -> new RuntimeException("Default role CLIENT not found"));
-//            roles.add(defaultRole);
-//        } else {
-//            // Fetch existing roles from the database
-//            for (String roleName : registrationDto.getRoles()) {
-//                Role role = roleRepository.findByName(roleName)
-//                        .orElseThrow(() -> new RuntimeException("Role not found: " + roleName));
-//                roles.add(role);
-//            }
-//        }
-//
-//        // Create the User entity
-//        User user = User.builder()
-//                .email(registrationDto.getEmail())
-//                .password(passwordEncoder.encode(registrationDto.getPassword()))
-//                .firstName(registrationDto.getFirstName())
-//                .lastName(registrationDto.getLastName())
-//                .phoneNumber(registrationDto.getPhoneNumber())
-//                .roles(roles)
-//                .createdAt(LocalDateTime.now())
-//                .build();
-//
-//        // Save the user
-//        User savedUser = userRepository.save(user);
-//
-//        // Publish user created event to Kafka
-//        userEventProducer.publishUserCreatedEvent(
-//                new UserCreatedEvent(savedUser.getId(), savedUser.getEmail(), savedUser.getFirstName(), savedUser.getLastName())
-//        );
-//
-//        return mapUserToDto(savedUser);
-//    }
-
-
     @Override
     public AuthResponseDto login(String email, String password) {
         try {
@@ -201,13 +163,23 @@ public class UserServiceImpl implements UserService {
                         .user(mapUserToDto(user))
                         .build();
             } else {
-                throw new IllegalStateException("Unexpected principal type. Expected CustomUserDetails.");
+                throw new AuthenticationException("Authentication failed: Unexpected principal type");
             }
         } catch (BadCredentialsException e) {
-            throw new RuntimeException("Invalid email or password");
+            // More specific exception with better message
+            throw new AuthenticationException("Invalid credentials: The email or password you entered is incorrect");
+        } catch (DisabledException e) {
+            throw new AuthenticationException("Account is disabled: Your account has been deactivated");
+        } catch (LockedException e) {
+            throw new AuthenticationException("Account is locked: Too many failed login attempts");
+        } catch (AuthenticationServiceException e) {
+            throw new AuthenticationException("Authentication service error: " + e.getMessage());
+        } catch (Exception e) {
+            // Log the unexpected error for debugging
+            log.error("Unexpected error during login", e);
+            throw new AuthenticationException("Login failed: An unexpected error occurred");
         }
     }
-
 
     @Override
     public UserResponseDto getUserById(Long id) {
@@ -294,19 +266,6 @@ public class UserServiceImpl implements UserService {
         );
     }
 
-//    @Override
-//    public String refreshToken(String refreshToken) {
-//        if (jwtTokenProvider.validateRefreshToken(refreshToken)) {
-//            String email = jwtTokenProvider.getUsernameFromRefreshToken(refreshToken);
-//            User user = userRepository.findByEmail(email)
-//                    .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + email));
-//            return jwtTokenProvider.generateToken(
-//                    new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities())
-//            );
-//        }
-//        throw new IllegalArgumentException("Invalid refresh token");
-//    }
-
 
     @Override
     public UserResponseDto getCurrentUserProfile() {
@@ -332,6 +291,104 @@ public class UserServiceImpl implements UserService {
 
         // If execution reaches here, it means an unexpected issue occurred
         throw new IllegalStateException("Unexpected principal type. Expected CustomUserDetails.");
+    }
+
+
+    @Override
+    @Transactional
+    public void requestPasswordReset(String email) {
+        log.info("Processing password reset request for email: {}", email);
+
+        // Security best practice: Don't reveal if email exists
+        userRepository.findByEmail(email).ifPresent(user -> {
+            try {
+                // Check if an existing token exists for the user
+                Optional<PasswordResetToken> existingToken = tokenRepository.findByUser(user);
+
+                if (existingToken.isPresent()) {
+                    // Update the existing token
+                    PasswordResetToken token = existingToken.get();
+                    token.setToken(UUID.randomUUID().toString());
+                    token.setExpiryDate(LocalDateTime.now().plusHours(24)); // 24 hours expiry
+                    tokenRepository.save(token);
+                    log.info("Updated password reset token for user: {}", user.getEmail());
+                } else {
+                    // Create a new token
+                    String tokenValue = UUID.randomUUID().toString();
+                    PasswordResetToken newToken = PasswordResetToken.builder()
+                            .token(tokenValue)
+                            .user(user)
+                            .expiryDate(LocalDateTime.now().plusHours(24)) // 24 hours expiry
+                            .build();
+                    tokenRepository.save(newToken);
+                    log.info("Created new password reset token for user: {}", user.getEmail());
+                }
+
+                // Send email with reset link
+                sendPasswordResetEmail(user.getEmail(), existingToken.isPresent() ? existingToken.get().getToken() : UUID.randomUUID().toString());
+
+            } catch (Exception e) {
+                log.error("Error processing password reset for user: {}", user.getEmail(), e);
+                throw new RuntimeException("Failed to process password reset request. Please try again later.");
+            }
+        });
+    }
+
+
+    @Override
+    public boolean validatePasswordResetToken(String token) {
+        return tokenRepository.findByToken(token)
+                .map(resetToken -> !resetToken.isExpired())
+                .orElse(false);
+    }
+
+    @Override
+    @Transactional
+    public void resetPassword(String token, String newPassword) {
+        PasswordResetToken resetToken = tokenRepository.findByToken(token)
+                .orElseThrow(() -> new ResourceNotFoundException("Invalid or expired password reset token"));
+
+        // Check if token is expired
+        if (resetToken.isExpired()) {
+            tokenRepository.delete(resetToken);
+            throw new InvalidTokenException("Password reset token has expired");
+        }
+
+        // Get user and update password
+        User user = resetToken.getUser();
+        user.setPassword(passwordEncoder.encode(newPassword));
+        user.setUpdatedAt(LocalDateTime.now());
+
+        userRepository.save(user);
+
+        // Delete used token
+        tokenRepository.delete(resetToken);
+
+        log.info("Password successfully reset for user: {}", user.getEmail());
+    }
+
+    private void sendPasswordResetEmail(String email, String token) {
+        try {
+            SimpleMailMessage message = getSimpleMailMessage(email, token);
+
+            emailSender.send(message);
+
+            log.info("Password reset email sent to: {}", email);
+        } catch (Exception e) {
+            log.error("Failed to send password reset email: {}", e.getMessage(), e);
+            // Continue execution - don't expose email sending failure to client
+        }
+    }
+
+    private SimpleMailMessage getSimpleMailMessage(String email, String token) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setTo(email);
+        message.setSubject("Password Reset Request");
+        message.setText("To reset your password, please click on the link below:\n\n" +
+                frontendUrl + "/reset-password?token=" + token +
+                "\n\nThis link will expire in 24 hours.\n\n" +
+                "If you did not request a password reset, please ignore this email and your password will remain unchanged.");
+        return message;
     }
 
 

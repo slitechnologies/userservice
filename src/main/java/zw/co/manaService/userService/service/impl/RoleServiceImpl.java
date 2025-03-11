@@ -9,7 +9,6 @@ import zw.co.manaService.userService.repository.RoleRepository;
 import zw.co.manaService.userService.service.RoleService;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -60,8 +59,7 @@ public class RoleServiceImpl implements RoleService {
     public List<RoleResponseDto> getAllRoles() {
         List<Role> roles = roleRepository.findAll();
         return roles.stream()
-                .map(this::mapToResponseDto)
-                .collect(Collectors.toList());
+                .map(this::mapToResponseDto).toList();
     }
 
     private RoleResponseDto mapToResponseDto(Role role) {

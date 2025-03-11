@@ -9,7 +9,9 @@ import org.springframework.web.bind.annotation.*;
 import zw.co.manaService.userService.model.dto.*;
 import zw.co.manaService.userService.service.UserService;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @CrossOrigin(origins = "http://localhost:3000")
 @RestController
@@ -98,4 +100,37 @@ public class UserController {
         UserResponseDto userProfile = userService.getCurrentUserProfile();
         return ResponseEntity.ok(userProfile);
     }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<Map<String, Object>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        userService.requestPasswordReset(request.getEmail());
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("status", "success");
+        response.put("message", "If your email exists in our system, you will receive a password reset link shortly.");
+
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/reset-password/validate")
+    public ResponseEntity<Map<String, Object>> validateResetToken(@RequestParam String token) {
+        boolean isValid = userService.validatePasswordResetToken(token);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("valid", isValid);
+
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<Map<String, Object>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        userService.resetPassword(request.getToken(), request.getNewPassword());
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("status", "success");
+        response.put("message", "Your password has been updated successfully.");
+
+        return ResponseEntity.ok(response);
+    }
+
 }

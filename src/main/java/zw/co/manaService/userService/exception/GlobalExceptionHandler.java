@@ -17,6 +17,7 @@ import java.util.Map;
 
 @RestControllerAdvice
 @Slf4j
+@SuppressWarnings("unused")
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(ResourceNotFoundException.class)
@@ -123,13 +124,24 @@ public class GlobalExceptionHandler {
 
         return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
     }
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<Object> handleAuthenticationException(AuthenticationException ex) {
+        // Create a simple Map for the error response
+        Map<String, Object> errorDetails = new HashMap<>();
+        errorDetails.put("status", HttpStatus.UNAUTHORIZED.value());
+        errorDetails.put("error", "Authentication Failed");
+        errorDetails.put("message", ex.getMessage());
 
+        // Return the error response with 401 status
+        return new ResponseEntity<>(errorDetails, HttpStatus.UNAUTHORIZED);
+    }
     @Getter
+    @SuppressWarnings("ClassCanBeRecord Class")
     public static class ErrorDetails {
-        private LocalDateTime timestamp;
-        private int status;
-        private String error;
-        private String message;
+        private final LocalDateTime timestamp;
+        private final int status;
+        private final String error;
+        private final String message;
 
         public ErrorDetails(LocalDateTime timestamp, int status, String error, String message) {
             this.timestamp = timestamp;
